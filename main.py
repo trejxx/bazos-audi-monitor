@@ -96,10 +96,5 @@ def check_ads():
 
 
 
-while True:
-
-    check_ads()
-
-    time.sleep(
-        600
-    )
+if __name__ == "__main__":
+    check()
