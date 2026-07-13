@@ -17,6 +17,7 @@ PAGES = [
     "https://auto.bazos.sk/inzeraty/audi-a4/5/",
 ]
 
+
 MIN_YEAR = 2020
 MAX_PRICE = 21000
 
@@ -34,12 +35,11 @@ def save_seen(data):
         json.dump(data, f, indent=2)
 
 
-def discord_send(data):
-
+def send_discord(embed):
     requests.post(
         DISCORD_WEBHOOK,
         json={
-            "embeds": [data]
+            "embeds": [embed]
         },
         timeout=20
     )
@@ -68,23 +68,33 @@ def get_detail(url):
     )
 
 
-    title = soup.find("h1")
+    # názov
+    h1 = soup.find("h1")
 
-    if title:
-        title = title.text.strip()
-    else:
-        title = "Audi A4"
+    title = h1.text.strip() if h1 else ""
+
+
+    # fotka cez og:image
+    image = None
+
+    og = soup.find(
+        "meta",
+        property="og:image"
+    )
+
+    if og:
+        image = og.get("content")
 
 
     price = None
 
-    m = re.search(
+    p = re.search(
         r"(\d[\d\s]*)\s?€",
         text
     )
 
-    if m:
-        price = m.group(1).replace(" ", "") + " €"
+    if p:
+        price = p.group(1).replace(" ","") + " €"
 
 
     year = None
@@ -109,14 +119,6 @@ def get_detail(url):
         km = km_match.group(1) + " km"
 
 
-    image = None
-
-    img = soup.find("img")
-
-    if img:
-        image = img.get("src")
-
-
     return {
         "title": title,
         "price": price,
@@ -130,7 +132,6 @@ def get_detail(url):
 def check():
 
     seen = load_seen()
-
 
     headers = {
         "User-Agent": "Mozilla/5.0"
@@ -161,54 +162,58 @@ def check():
                 continue
 
 
-            if href in seen:
-                continue
-
-
             if not href.startswith("http"):
                 href = BASE_URL + href
+
+
+            if href in seen:
+                continue
 
 
             info = get_detail(href)
 
 
-            year = info["year"]
-
-            if year and int(year) < MIN_YEAR:
-                continue
-
-
-            price = info["price"]
-
-            if price:
-                price_num = int(
-                    price.replace("€","").replace(" ","")
-                )
-
-                if price_num > MAX_PRICE:
-                    continue
-
-
             title = info["title"].lower()
 
 
-            rating = ""
+            # HLAVNY FILTER
+            if "audi" not in title:
+                continue
 
-            keywords = [
-                "s line",
-                "quattro",
-                "matrix",
-                "35 tfsi",
-                "40 tfsi",
-                "40 tdi"
-            ]
+            if "a4" not in title:
+                continue
 
-            if any(x in title for x in keywords):
-                rating = "🔥 TOP KUS"
+
+            if any(x in title for x in [
+                "diel",
+                "svetlo",
+                "nárazník",
+                "disk",
+                "koleso"
+            ]):
+                continue
+
+
+
+            if info["year"]:
+                if int(info["year"]) < MIN_YEAR:
+                    continue
+
+
+            if info["price"]:
+                price = int(
+                    info["price"]
+                    .replace("€","")
+                    .replace(" ","")
+                )
+
+                if price > MAX_PRICE:
+                    continue
+
 
 
             embed = {
-                "title": f"🚗 {rating} Audi A4",
+                "title": "🚗 Audi A4",
                 "description": info["title"],
                 "url": href,
                 "fields": [
@@ -237,13 +242,13 @@ def check():
                 }
 
 
-            discord_send(embed)
-
+            send_discord(embed)
 
             seen.append(href)
 
 
     save_seen(seen)
+
 
 
 if __name__ == "__main__":
