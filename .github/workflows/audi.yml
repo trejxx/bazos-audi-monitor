@@ -2,7 +2,7 @@ name: Audi Bazos Monitor
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "* * * * *"
   workflow_dispatch:
 
 jobs:
@@ -30,11 +30,3 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           python main.py
-
-      - name: Save database
-        run: |
-          git config --global user.name "Audi Radar Bot"
-          git config --global user.email "bot@github.com"
-          git add database.json
-          git commit -m "Update database" || exit 0
-          git push
