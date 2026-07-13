@@ -55,15 +55,14 @@ def discord_send(embed):
 
 def parse_price(text):
 
-    match = re.search(
+    m = re.search(
         r"(\d[\d\s]*)\s?€",
         text
     )
 
-    if match:
+    if m:
         return int(
-            match.group(1)
-            .replace(" ", "")
+            m.group(1).replace(" ", "")
         )
 
     return None
@@ -80,25 +79,18 @@ def parse_km(text):
         r"(\d+)\s?(tis|tkm)"
     ]
 
-
     for p in patterns:
 
-        m = re.search(
-            p,
-            text
-        )
+        m = re.search(p, text)
 
         if m:
 
             value = int(
-                m.group(1)
-                .replace(" ", "")
+                m.group(1).replace(" ", "")
             )
-
 
             if "tis" in m.group(0) or "tkm" in m.group(0):
                 value *= 1000
-
 
             return value
 
@@ -115,7 +107,6 @@ def parse_year(text):
         r"(20\d{2})\s?ročník"
     ]
 
-
     for p in patterns:
 
         m = re.search(
@@ -126,7 +117,6 @@ def parse_year(text):
         if m:
             return int(m.group(1))
 
-
     return None
 
 
@@ -136,8 +126,7 @@ def get_score(title):
     score = 0
     title = title.lower()
 
-
-    checks = {
+    words = {
         "avant": 2,
         "quattro": 2,
         "s line": 2,
@@ -147,12 +136,10 @@ def get_score(title):
         "40 tdi": 1,
     }
 
-
-    for word, points in checks.items():
+    for word, points in words.items():
 
         if word in title:
             score += points
-
 
     return score
 
@@ -163,7 +150,6 @@ def get_detail(url):
     headers = {
         "User-Agent": "Mozilla/5.0"
     }
-
 
     r = requests.get(
         url,
@@ -210,9 +196,110 @@ def get_detail(url):
 
 
 
+def send_new_car(info, href):
+
+    score = get_score(info["title"])
+
+    label = ""
+
+    if score >= 5:
+        label = "🔥 TOP KUS"
+
+
+    embed = {
+
+        "title": f"🚗 {label} Audi A4",
+
+        "description": info["title"],
+
+        "url": href,
+
+        "fields": [
+
+            {
+                "name": "💶 Cena",
+                "value": f"{info['price']} €" if info["price"] else "Neudaná",
+                "inline": True
+            },
+
+            {
+                "name": "📅 Rok",
+                "value": str(info["year"]) if info["year"] else "Neoverený",
+                "inline": True
+            },
+
+            {
+                "name": "🛣️ Km",
+                "value": f"{info['km']} km" if info["km"] else "Neudané",
+                "inline": True
+            }
+
+        ]
+    }
+
+
+    if info["image"]:
+        embed["image"] = {
+            "url": info["image"]
+        }
+
+
+    discord_send(embed)
+
+
+
+def send_price_drop(info, href, old_price, new_price):
+
+    difference = old_price - new_price
+
+
+    embed = {
+
+        "title": "🚨 Audi A4 ZNÍŽENIE CENY",
+
+        "description": info["title"],
+
+        "url": href,
+
+        "fields": [
+
+            {
+                "name": "💶 Pôvodná cena",
+                "value": f"{old_price} €",
+                "inline": True
+            },
+
+            {
+                "name": "💰 Nová cena",
+                "value": f"{new_price} €",
+                "inline": True
+            },
+
+            {
+                "name": "⬇️ Rozdiel",
+                "value": f"-{difference} €",
+                "inline": True
+            }
+
+        ]
+
+    }
+
+
+    if info["image"]:
+        embed["image"] = {
+            "url": info["image"]
+        }
+
+
+    discord_send(embed)
+
+
+
 def check():
 
     database = load_database()
+
 
     headers = {
         "User-Agent": "Mozilla/5.0"
@@ -248,10 +335,6 @@ def check():
                 href = BASE_URL + href
 
 
-            if href in database:
-                continue
-
-
             info = get_detail(href)
 
 
@@ -266,64 +349,43 @@ def check():
                 continue
 
 
-            score = get_score(
-                info["title"]
+
+            # EXISTUJÚCE AUTO - KONTROLA CENY
+
+            if href in database:
+
+
+                old_price = database[href].get("price")
+
+                new_price = info["price"]
+
+
+                if (
+                    old_price
+                    and new_price
+                    and new_price < old_price
+                ):
+
+                    send_price_drop(
+                        info,
+                        href,
+                        old_price,
+                        new_price
+                    )
+
+
+                database[href]["price"] = new_price
+
+                continue
+
+
+
+            # NOVÉ AUTO
+
+            send_new_car(
+                info,
+                href
             )
-
-
-            label = ""
-
-            if score >= 5:
-                label = "🔥 TOP KUS"
-
-
-
-            embed = {
-
-                "title": f"🚗 {label} Audi A4",
-
-                "description": info["title"],
-
-                "url": href,
-
-                "fields": [
-
-                    {
-                        "name": "💶 Cena",
-                        "value": f"{info['price']} €" if info["price"] else "Neudaná",
-                        "inline": True
-                    },
-
-                    {
-                        "name": "📅 Rok",
-                        "value": str(info["year"]) if info["year"] else "Neoverený",
-                        "inline": True
-                    },
-
-                    {
-                        "name": "🛣️ Km",
-                        "value": f"{info['km']} km" if info["km"] else "Neudané",
-                        "inline": True
-                    },
-
-                    {
-                        "name": "⭐ Skóre",
-                        "value": f"{score}/10",
-                        "inline": True
-                    }
-
-                ]
-
-            }
-
-
-            if info["image"]:
-                embed["image"] = {
-                    "url": info["image"]
-                }
-
-
-            discord_send(embed)
 
 
             database[href] = {
