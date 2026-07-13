@@ -7,22 +7,11 @@ import re
 
 DISCORD_WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 
-SEARCH_URL = "https://auto.bazos.sk/inzeraty/audi-a4/"
+SEARCH_URLS = [
+    "https://auto.bazos.sk/inzeraty/audi-a4/"
+]
 
 BASE_URL = "https://auto.bazos.sk"
-
-MAX_PRICE = 21000
-MIN_YEAR = 2020
-
-
-def send_discord(message):
-    requests.post(
-        DISCORD_WEBHOOK,
-        json={
-            "content": message
-        },
-        timeout=20
-    )
 
 
 def load_seen():
@@ -38,26 +27,97 @@ def save_seen(data):
         json.dump(data, f, indent=2)
 
 
-def extract_price(text):
+def send_discord(title, price, year, km, location, image, link):
 
-    prices = re.findall(
+    embed = {
+        "title": "🚗 Nová Audi A4",
+        "description": title,
+        "url": link,
+        "fields": [
+            {
+                "name": "💶 Cena",
+                "value": price or "Neuvedená",
+                "inline": True
+            },
+            {
+                "name": "📅 Rok",
+                "value": year or "Neuvedený",
+                "inline": True
+            },
+            {
+                "name": "🛣️ KM",
+                "value": km or "Neuvedené",
+                "inline": True
+            },
+            {
+                "name": "📍 Lokalita",
+                "value": location or "Neuvedená",
+                "inline": True
+            }
+        ],
+        "footer": {
+            "text": "Audi A4 Bazoš Monitor"
+        }
+    }
+
+    if image:
+        embed["image"] = {
+            "url": image
+        }
+
+    requests.post(
+        DISCORD_WEBHOOK,
+        json={
+            "embeds": [embed]
+        },
+        timeout=20
+    )
+
+
+def parse_detail(url):
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    r = requests.get(
+        url,
+        headers=headers,
+        timeout=30
+    )
+
+    soup = BeautifulSoup(
+        r.text,
+        "html.parser"
+    )
+
+
+    text = soup.get_text(
+        " ",
+        strip=True
+    )
+
+
+    title = ""
+
+    h1 = soup.find("h1")
+
+    if h1:
+        title = h1.text.strip()
+
+
+    price = None
+
+    price_match = re.search(
         r"(\d[\d\s]*)\s?€",
         text
     )
 
-    if prices:
-        try:
-            return int(
-                prices[0].replace(" ", "")
-            )
-        except:
-            return None
-
-    return None
+    if price_match:
+        price = price_match.group(1) + " €"
 
 
-
-def extract_year(text):
+    year = None
 
     years = re.findall(
         r"\b(20\d{2})\b",
@@ -65,10 +125,51 @@ def extract_year(text):
     )
 
     if years:
-        return int(years[0])
+        year = years[0]
 
-    return None
 
+    km = None
+
+    km_match = re.search(
+        r"(\d[\d\s]*)\s?km",
+        text.lower()
+    )
+
+    if km_match:
+        km = km_match.group(1) + " km"
+
+
+    location = None
+
+    for word in [
+        "Bratislava",
+        "Trenčín",
+        "Žilina",
+        "Košice",
+        "Nitra",
+        "Prešov"
+    ]:
+        if word in text:
+            location = word
+            break
+
+
+    image = None
+
+    img = soup.find("img")
+
+    if img:
+        image = img.get("src")
+
+
+    return (
+        title,
+        price,
+        year,
+        km,
+        location,
+        image
+    )
 
 
 def check():
@@ -80,113 +181,67 @@ def check():
     }
 
 
-    response = requests.get(
-        SEARCH_URL,
-        headers=headers,
-        timeout=30
-    )
+    for search in SEARCH_URLS:
+
+        r = requests.get(
+            search,
+            headers=headers,
+            timeout=30
+        )
 
 
-    soup = BeautifulSoup(
-        response.text,
-        "html.parser"
-    )
+        soup = BeautifulSoup(
+            r.text,
+            "html.parser"
+        )
 
 
-    new_ads = 0
-
-
-    for a in soup.find_all("a", href=True):
-
-        link = a["href"]
-        title = a.text.strip()
-
-
-        if "/inzerat/" not in link:
-            continue
-
-
-        if link in seen:
-            continue
-
-
-        full_link = link
-
-        if not link.startswith("http"):
-            full_link = BASE_URL + link
-
-
-        # ignorovanie dielov
-        bad_words = [
-            "svetlo",
-            "disk",
-            "koles",
-            "nárazník",
-            "sedačka",
-            "volant",
-            "radio",
-            "diel"
-        ]
-
-
-        lower = title.lower()
-
-
-        if any(
-            word in lower
-            for word in bad_words
+        for a in soup.find_all(
+            "a",
+            href=True
         ):
-            continue
+
+            href = a["href"]
 
 
-        year = extract_year(title)
-        price = extract_price(title)
+            if "/inzerat/" not in href:
+                continue
 
 
-        # ak sa dá vyčítať rok, kontrolujeme ho
-        if year and year < MIN_YEAR:
-            continue
+            if href in seen:
+                continue
 
 
-        # ak sa dá vyčítať cena, kontrolujeme ju
-        if price and price > MAX_PRICE:
-            continue
+            if not href.startswith("http"):
+                href = BASE_URL + href
 
 
-
-        message = (
-            "🚗 **Nová Audi A4!**\n\n"
-            f"📌 {title}\n"
-        )
+            title = a.text.lower()
 
 
-        if year:
-            message += f"📅 Rok: {year}\n"
-
-        if price:
-            message += f"💶 Cena: {price} €\n"
+            if "a4" not in title:
+                continue
 
 
-        message += (
-            f"\n🔗 {full_link}"
-        )
+            data = parse_detail(href)
 
 
-        send_discord(message)
+            send_discord(
+                data[0],
+                data[1],
+                data[2],
+                data[3],
+                data[4],
+                data[5],
+                href
+            )
 
 
-        seen.append(link)
-        new_ads += 1
+            seen.append(href)
 
 
 
     save_seen(seen)
-
-
-    print(
-        f"Hotovo. Nové vhodné Audi: {new_ads}"
-    )
-
 
 
 if __name__ == "__main__":
