@@ -2,12 +2,20 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import os
-import time
 
 
 DISCORD_WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 
 SEARCH_URL = "https://auto.bazos.sk/search.php?hledat=Audi+A4"
+
+
+def send_discord(message):
+    requests.post(
+        DISCORD_WEBHOOK,
+        json={
+            "content": message
+        }
+    )
 
 
 def load_seen():
@@ -18,82 +26,61 @@ def load_seen():
         return []
 
 
-def save_seen(data):
+def save_seen(seen):
     with open("seen.json", "w") as f:
-        json.dump(data, f)
+        json.dump(seen, f)
 
 
-def send_discord(title, price, link):
-
-    message = {
-        "content":
-        f"🚗 **Nový Audi A4 inzerát!**\n\n"
-        f"**{title}**\n"
-        f"💶 {price}\n"
-        f"🔗 {link}"
-    }
-
-    requests.post(
-        DISCORD_WEBHOOK,
-        json=message
-    )
-
-
-def check_ads():
-
+def check():
     seen = load_seen()
 
     headers = {
-        "User-Agent":
-        "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0"
     }
 
-    r = requests.get(
+    response = requests.get(
         SEARCH_URL,
-        headers=headers
+        headers=headers,
+        timeout=30
     )
 
     soup = BeautifulSoup(
-        r.text,
+        response.text,
         "html.parser"
     )
 
+    found = 0
 
-    ads = soup.find_all(
-        "div",
-        class_="inzerat"
-    )
+    for a in soup.find_all("a", href=True):
 
+        href = a["href"]
 
-    for ad in ads:
-
-        link = ad.find("a")
-
-        if not link:
+        if "inzerat" not in href:
             continue
 
-        url = link.get("href")
-
-        if url in seen:
+        if href in seen:
             continue
 
+        title = a.text.strip()
 
-        title = link.text.strip()
+        if "Audi" not in title and "A4" not in title:
+            continue
 
-        price = "Cena neuvedená"
-
-        send_discord(
-            title,
-            price,
-            url
+        message = (
+            "🚗 **Nový Audi A4 inzerát!**\n\n"
+            f"{title}\n"
+            f"🔗 {href}"
         )
 
+        send_discord(message)
 
-        seen.append(url)
+        seen.append(href)
+        found += 1
 
 
     save_seen(seen)
 
+    print(f"Hotovo. Nové inzeráty: {found}")
 
 
 if __name__ == "__main__":
