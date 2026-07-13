@@ -13,7 +13,6 @@ jobs:
 
     runs-on: ubuntu-latest
 
-
     permissions:
       contents: write
 
@@ -32,24 +31,32 @@ jobs:
 
 
       - name: Install packages
-        run: pip install -r requirements.txt
+        run: |
+          pip install requests beautifulsoup4
 
 
-      - name: Run monitor
+      - name: Run bot
+
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
-        run: python main.py
+        run: |
+          python main.py
 
 
-      - name: Save seen ads
+      - name: Save database
 
         run: |
-          git config --global user.name "Audi Bot"
+
+          git config --global user.name "Audi Radar Bot"
+
           git config --global user.email "bot@github.com"
 
-          git add seen.json
 
-          git commit -m "Update seen ads" || exit 0
+          git add database.json
+
+
+          git commit -m "Update Audi database" || exit 0
+
 
           git push
