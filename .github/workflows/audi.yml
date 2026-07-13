@@ -1,0 +1,40 @@
+name: Audi Bazos Monitor
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packages
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: Run script
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          python main.py
+
+      - name: Save database
+        run: |
+          git config --global user.name "Audi Radar Bot"
+          git config --global user.email "bot@github.com"
+          git add database.json
+          git commit -m "Update database" || exit 0
+          git push
