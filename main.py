@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import json
 import os
 import re
+import time
 from datetime import datetime
 
 
@@ -11,33 +12,39 @@ DISCORD_WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 BASE_URL = "https://auto.bazos.sk"
 
 PAGES = [
-    f"{BASE_URL}/inzeraty/audi-a4/",
-    f"{BASE_URL}/inzeraty/audi-a4/2/",
-    f"{BASE_URL}/inzeraty/audi-a4/3/",
-    f"{BASE_URL}/inzeraty/audi-a4/4/",
-    f"{BASE_URL}/inzeraty/audi-a4/5/",
-    f"{BASE_URL}/inzeraty/audi-a4/6/",
-    f"{BASE_URL}/inzeraty/audi-a4/7/",
-    f"{BASE_URL}/inzeraty/audi-a4/8/",
-    f"{BASE_URL}/inzeraty/audi-a4/9/",
-    f"{BASE_URL}/inzeraty/audi-a4/10/",
+    f"{BASE_URL}/inzeraty/audi-a4/"
+] + [
+    f"{BASE_URL}/inzeraty/audi-a4/{i}/"
+    for i in range(2, 21)
 ]
-
 
 DATABASE = "database.json"
 
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+
+
 def load_database():
     try:
-        with open(DATABASE, "r") as f:
+        with open(DATABASE, "r", encoding="utf-8") as f:
             return json.load(f)
     except:
         return {}
 
 
+
 def save_database(data):
-    with open(DATABASE, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    with open(DATABASE, "w", encoding="utf-8") as f:
+        json.dump(
+            data,
+            f,
+            indent=2,
+            ensure_ascii=False
+        )
 
 
 
@@ -79,20 +86,28 @@ def parse_km(text):
         r"(\d+)\s?(tis|tkm)"
     ]
 
+
     for p in patterns:
 
-        m = re.search(p, text)
+        m = re.search(
+            p,
+            text
+        )
 
         if m:
 
             value = int(
-                m.group(1).replace(" ", "")
+                m.group(1)
+                .replace(" ", "")
             )
+
 
             if "tis" in m.group(0) or "tkm" in m.group(0):
                 value *= 1000
 
+
             return value
+
 
     return None
 
@@ -101,11 +116,17 @@ def parse_km(text):
 def parse_year(text):
 
     patterns = [
+
         r"r\.v\.\s?(20\d{2})",
+
         r"rok výroby\s?(20\d{2})",
+
         r"vyrobené\s?(20\d{2})",
+
         r"(20\d{2})\s?ročník"
+
     ]
+
 
     for p in patterns:
 
@@ -117,6 +138,7 @@ def parse_year(text):
         if m:
             return int(m.group(1))
 
+
     return None
 
 
@@ -124,22 +146,28 @@ def parse_year(text):
 def get_score(title):
 
     score = 0
+
     title = title.lower()
 
+
     words = {
+
         "avant": 2,
         "quattro": 2,
         "s line": 2,
         "matrix": 1,
         "35 tfsi": 1,
         "40 tfsi": 1,
-        "40 tdi": 1,
+        "40 tdi": 1
+
     }
+
 
     for word, points in words.items():
 
         if word in title:
             score += points
+
 
     return score
 
@@ -147,13 +175,12 @@ def get_score(title):
 
 def get_detail(url):
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    time.sleep(0.3)
+
 
     r = requests.get(
         url,
-        headers=headers,
+        headers=HEADERS,
         timeout=30
     )
 
@@ -172,7 +199,11 @@ def get_detail(url):
 
     h1 = soup.find("h1")
 
-    title = h1.text.strip() if h1 else ""
+    title = ""
+
+    if h1:
+        title = h1.text.strip()
+
 
 
     image = None
@@ -182,28 +213,40 @@ def get_detail(url):
         property="og:image"
     )
 
+
     if img:
         image = img.get("content")
 
 
+
     return {
+
         "title": title,
+
         "price": parse_price(text),
+
         "km": parse_km(text),
+
         "year": parse_year(text),
+
         "image": image
+
     }
 
 
 
-def send_new_car(info, href):
+def send_new_car(info, url):
 
-    score = get_score(info["title"])
+    score = get_score(
+        info["title"]
+    )
+
 
     label = ""
 
     if score >= 5:
         label = "🔥 TOP KUS"
+
 
 
     embed = {
@@ -212,7 +255,8 @@ def send_new_car(info, href):
 
         "description": info["title"],
 
-        "url": href,
+        "url": url,
+
 
         "fields": [
 
@@ -232,26 +276,33 @@ def send_new_car(info, href):
                 "name": "🛣️ Km",
                 "value": f"{info['km']} km" if info["km"] else "Neudané",
                 "inline": True
+            },
+
+            {
+                "name": "⭐ Skóre",
+                "value": f"{score}/10",
+                "inline": True
             }
 
         ]
+
     }
 
 
+
     if info["image"]:
+
         embed["image"] = {
             "url": info["image"]
         }
+
 
 
     discord_send(embed)
 
 
 
-def send_price_drop(info, href, old_price, new_price):
-
-    difference = old_price - new_price
-
+def send_price_drop(info, url, old_price, new_price):
 
     embed = {
 
@@ -259,25 +310,26 @@ def send_price_drop(info, href, old_price, new_price):
 
         "description": info["title"],
 
-        "url": href,
+        "url": url,
+
 
         "fields": [
 
             {
-                "name": "💶 Pôvodná cena",
+                "name": "💶 Pôvodná",
                 "value": f"{old_price} €",
                 "inline": True
             },
 
             {
-                "name": "💰 Nová cena",
+                "name": "💰 Nová",
                 "value": f"{new_price} €",
                 "inline": True
             },
 
             {
                 "name": "⬇️ Rozdiel",
-                "value": f"-{difference} €",
+                "value": f"-{old_price-new_price} €",
                 "inline": True
             }
 
@@ -286,10 +338,13 @@ def send_price_drop(info, href, old_price, new_price):
     }
 
 
+
     if info["image"]:
+
         embed["image"] = {
             "url": info["image"]
         }
+
 
 
     discord_send(embed)
@@ -301,102 +356,121 @@ def check():
     database = load_database()
 
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-
 
     for page in PAGES:
 
 
-        r = requests.get(
-            page,
-            headers=headers,
-            timeout=30
-        )
+        try:
 
-
-        soup = BeautifulSoup(
-            r.text,
-            "html.parser"
-        )
-
-
-        for a in soup.find_all("a", href=True):
-
-            href = a["href"]
-
-
-            if "/inzerat/" not in href:
-                continue
-
-
-            if not href.startswith("http"):
-                href = BASE_URL + href
-
-
-            info = get_detail(href)
-
-
-            title = info["title"].lower()
-
-
-            if "audi" not in title:
-                continue
-
-
-            if "a4" not in title:
-                continue
-
-
-
-            # EXISTUJÚCE AUTO - KONTROLA CENY
-
-            if href in database:
-
-
-                old_price = database[href].get("price")
-
-                new_price = info["price"]
-
-
-                if (
-                    old_price
-                    and new_price
-                    and new_price < old_price
-                ):
-
-                    send_price_drop(
-                        info,
-                        href,
-                        old_price,
-                        new_price
-                    )
-
-
-                database[href]["price"] = new_price
-
-                continue
-
-
-
-            # NOVÉ AUTO
-
-            send_new_car(
-                info,
-                href
+            r = requests.get(
+                page,
+                headers=HEADERS,
+                timeout=30
             )
 
 
-            database[href] = {
+            soup = BeautifulSoup(
+                r.text,
+                "html.parser"
+            )
 
-                "title": info["title"],
 
-                "first_seen": datetime.now().isoformat(),
+            for a in soup.find_all(
+                "a",
+                href=True
+            ):
 
-                "price": info["price"]
 
-            }
+                href = a["href"]
+
+
+                if "/inzerat/" not in href:
+                    continue
+
+
+
+                if not href.startswith("http"):
+
+                    href = BASE_URL + href
+
+
+
+                info = get_detail(href)
+
+
+
+                title = info["title"].lower()
+
+
+
+                if "audi" not in title:
+                    continue
+
+
+                if "a4" not in title:
+                    continue
+
+
+
+                if href in database:
+
+
+                    old_price = database[href].get("price")
+
+                    new_price = info["price"]
+
+
+
+                    if (
+
+                        old_price
+
+                        and new_price
+
+                        and new_price < old_price
+
+                    ):
+
+                        send_price_drop(
+                            info,
+                            href,
+                            old_price,
+                            new_price
+                        )
+
+
+
+                    database[href]["price"] = new_price
+
+                    continue
+
+
+
+                send_new_car(
+                    info,
+                    href
+                )
+
+
+
+                database[href] = {
+
+                    "title": info["title"],
+
+                    "first_seen": datetime.now().isoformat(),
+
+                    "price": info["price"]
+
+                }
+
+
+
+        except Exception as e:
+
+            print(
+                "Chyba:",
+                e
+            )
 
 
 
@@ -405,4 +479,5 @@ def check():
 
 
 if __name__ == "__main__":
+
     check()
