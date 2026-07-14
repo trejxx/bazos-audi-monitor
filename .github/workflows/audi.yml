@@ -2,7 +2,7 @@ name: Audi Bazos Monitor v2
 
 on:
   schedule:
-    - cron: "* * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 jobs:
